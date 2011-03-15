@@ -1,0 +1,1 @@
+BLEAK_HOUSE=true ruby-bleak-house  `which rackup` -s thin -E none leak.ru
