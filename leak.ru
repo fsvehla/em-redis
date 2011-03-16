@@ -1,22 +1,20 @@
 $:<< ::File.expand_path(::File.dirname(__FILE__) + '/lib')
 
+require 'logger'
 require 'bundler'
 Bundler.setup
 require 'bleak_house' if ENV['BLEAK_HOUSE']
 require 'eventmachine'
 require 'em-redis'
 
-
-
-
-
-
-
 ASYNC_RESPONSE = [-1, {}, []].freeze
+
 EventMachine.next_tick do
-  STORE=EM::Protocols::Redis.connect(6379, '127.0.0.1')
+  STORE=EM::Protocols::Redis.connect :logger => Logger.new(STDOUT), :queue_commands => false
 end
+
 $r=0
+$last_vsz_memory=0
 
 class Controller
   def vsz_memory
@@ -28,7 +26,14 @@ class Controller
   end
   def call(env)
     @res=(0..100).map {Rack::Request.new(env) } #make use use more memory
-    puts vsz_memory if ($r+=1) % 100 == 0
+
+    if ($r+=1) % 100 == 0
+      mem = vsz_memory
+      change = mem - $last_vsz_memory
+      puts "#{mem} (#{'+' if change > 0}#{change})"
+      $last_vsz_memory = mem
+    end
+
     t = EventMachine::Timer.new(0.001) do
       env['async.callback'].call [200, {'Content-Type' => 'text/plain'}, ['timeout']]
     end
