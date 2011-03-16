@@ -228,7 +228,11 @@ module EventMachine
       end
 
       def call_command(argv, &blk)
-        callback { raw_call_command(argv, &blk) }
+        if !@queue_commands and @deferred_status != :succeeded
+          blk.call(nil) if block_given?
+        else
+          callback { raw_call_command(argv, &blk) }
+        end
       end
 
       def raw_call_command(argv, &blk)
@@ -239,7 +243,11 @@ module EventMachine
       end
 
       def call_commands(argvs, &blk)
-        callback { raw_call_commands(argvs, &blk) }
+        if !@queue_commands and @deferred_status != :succeeded
+          blk.call(nil) if block_given?
+        else
+          callback { raw_call_commands(argvs, &blk) }
+        end
       end
 
       def raw_call_commands(argvs, &blk)
@@ -334,6 +342,8 @@ module EventMachine
         @db             = (options[:db] || 0).to_i
         @password       = options[:password]
         @logger         = options[:logger]
+        @queue_commands = true
+        @queue_commands = options[:queue_commands]
         @error_callback = lambda do |code|
           err = RedisError.new
           err.code = code
@@ -358,6 +368,7 @@ module EventMachine
         @multibulk_n     = false
         @reconnecting    = false
         @connected       = true
+        auth_and_select_db
 
         succeed
       end
@@ -461,11 +472,11 @@ module EventMachine
 
       def unbind
         @logger.debug { "Disconnected" }  if @logger
+
         if @connected || @reconnecting
           EM.add_timer(1) do
             @logger.debug { "Reconnecting to #{@host}:#{@port}" }  if @logger
             reconnect @host, @port
-            auth_and_select_db
           end
           @connected = false
           @reconnecting = true
